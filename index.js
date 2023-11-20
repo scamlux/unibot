@@ -1,8 +1,16 @@
 const TelegramBot = require("node-telegram-bot-api");
 const token =
-  process.env.BOT_TOKEN || "6892360693:AAHwWc-TPEdv8XygusE1KWHjpZvRefQYers"; // Replace with your bot token
+  process.env.BOT_TOKEN || "6892360693:AAGeSy5NQF8UEMO1WdA8JKzo2sYTnSHPbag"; // Replace with your bot token
 
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, {
+  polling: {
+    interval: 1000, // How often to check for new updates (in milliseconds)
+    autoStart: true, // Automatically start polling after creating the bot instance
+    params: {
+      timeout: 10, // Timeout for long polling (in seconds)
+    },
+  },
+});
 
 // Step 1: Auth and saving users
 let users = {};
@@ -121,8 +129,9 @@ function forwardMediaToChannel(msg, mediaType) {
     .sendDocument(publics, mediaId)
     .then(() => {
       bot.sendMessage(
-        msg.from.id,
-        `${mediaType} forwarded to channel successfully.`
+        admins,
+        `${mediaType} forwarded to channel successfully. 
+From ${msg.chat.id}`
       );
     })
     .catch((error) => {
