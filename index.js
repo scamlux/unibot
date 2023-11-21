@@ -1,13 +1,13 @@
 const TelegramBot = require("node-telegram-bot-api");
 const token =
-  process.env.BOT_TOKEN || "6892360693:AAGeSy5NQF8UEMO1WdA8JKzo2sYTnSHPbag"; // Replace with your bot token
+  process.env.BOT_TOKEN || "6892360693:AAFzNey8uM3hJ_yQyOrDKkA9kR0GOs2E_XA"; // Replace with your bot token
 
 const bot = new TelegramBot(token, {
   polling: {
-    interval: 1000, // How often to check for new updates (in milliseconds)
-    autoStart: true, // Automatically start polling after creating the bot instance
+    interval: 1000,
+    autoStart: true,
     params: {
-      timeout: 10, // Timeout for long polling (in seconds)
+      timeout: 10,
     },
   },
 });
@@ -18,6 +18,7 @@ let users = {};
 const publics = process.env.PUBLIC_CHANNEL || -1002134844846;
 const admins = process.env.ADMINS_CHANNEL || -1001886131721;
 
+// Handle the /start command
 bot.onText(/\/start/, (msg) => {
   const userId = msg.from.id;
 
@@ -25,7 +26,7 @@ bot.onText(/\/start/, (msg) => {
     // User is already registered
     bot.sendMessage(
       users[userId],
-      `Hello${msg.chat.username || " user"}! Welcome back.`
+      `Hello ${msg.chat.username || "user"}! Welcome back.`
     );
   } else {
     // User is not registered
@@ -36,35 +37,22 @@ bot.onText(/\/start/, (msg) => {
   }
 });
 
-// Step 3: Forwarding stickers, audio, video messages, and other media types
-bot.on("sticker", (msg) => {
-  forwardMediaToChannel(msg, "sticker");
+// Handle different media types
+[
+  "sticker",
+  "audio",
+  "video",
+  "voice",
+  "document",
+  "photo",
+  "video_note",
+].forEach((mediaType) => {
+  bot.on(mediaType, (msg) => {
+    forwardMediaToChannel(msg, mediaType);
+  });
 });
 
-bot.on("audio", (msg) => {
-  forwardMediaToChannel(msg, "audio");
-});
-
-bot.on("video", (msg) => {
-  forwardMediaToChannel(msg, "video");
-});
-
-bot.on("voice", (msg) => {
-  forwardMediaToChannel(msg, "voice");
-});
-
-bot.on("document", (msg) => {
-  forwardMediaToChannel(msg, "document");
-});
-
-bot.on("photo", (msg) => {
-  forwardMediaToChannel(msg, "photo");
-});
-
-bot.on("video_note", (msg) => {
-  forwardMediaToChannel(msg, "video_note");
-});
-
+// Handle the /login command
 bot.onText(/\/login/, (msg) => {
   const userId = msg.from.id;
 
@@ -78,41 +66,18 @@ bot.onText(/\/login/, (msg) => {
       one_time_keyboard: true,
     };
 
-    if (msg.contact) {
-      const phoneNumber = msg.contact.phone_number;
-
-      users[userId] = msg.chat.id;
-
-      bot.sendMessage(users[userId], "You are now authenticated! Welcome!");
-
-      bot.sendMessage(
-        admins,
-        `User ${userId} shared their phone number: ${phoneNumber}`
-      );
-    } else {
-      // User shared other contact data
-      const userData = {
-        Name: msg.from.first_name,
-        Username: msg.from.username,
-      };
-
-      bot.sendMessage(
-        admins,
-        `New user data shared:\n${JSON.stringify(userData, null, 2)}`
-      );
-
-      bot.sendMessage(
-        userId,
-        "To better assist you, please share your phone number.",
-        { reply_markup: keyboard }
-      );
-    }
+    bot.sendMessage(
+      userId,
+      "To better assist you, please share your phone number.",
+      { reply_markup: keyboard }
+    );
   } else {
     // User is already registered
     bot.sendMessage(users[userId], "Hello user! You are already registered.");
   }
 });
 
+// Handle incoming text messages
 bot.on("message", (msg) => {
   if (msg.text) {
     bot.sendMessage(publics, msg.text);
@@ -120,22 +85,75 @@ bot.on("message", (msg) => {
   console.log(msg);
 });
 
+// Handle the contact event when the user shares their contact information
+bot.on("contact", (msg) => {
+  const userId = msg.from.id;
+  const phoneNumber = msg.contact.phone_number;
+
+  if (phoneNumber) {
+    // Save user data
+    users[userId] = {
+      chatId: msg.chat.id,
+      phoneNumber: phoneNumber,
+      firstName: msg.contact.first_name,
+      username: msg.contact.username,
+    };
+
+    // Send user info to Admins channel
+    bot.sendMessage(
+      admins,
+      `New user data:\nID: ${userId}\nName: ${msg.contact.first_name}\nUsername: ${msg.contact.username}\nPhone Number: ${phoneNumber}`
+    );
+
+    // Respond to the user
+    bot.sendMessage(userId, "You are now authenticated! Welcome!");
+  } else {
+    bot.sendMessage(
+      userId,
+      "Unable to retrieve your phone number. Please try again."
+    );
+  }
+});
+
+// Function to forward media to the channel
 function forwardMediaToChannel(msg, mediaType) {
   const mediaId = msg[mediaType].file_id;
 
-  bot.sendChatAction(publics, "upload_document"); // Show "typing..." action
-
-  bot
-    .sendDocument(publics, mediaId)
-    .then(() => {
-      bot.sendMessage(
-        admins,
-        `${mediaType} forwarded to channel successfully. 
+  if (msg.caption) {
+    // If the media has a caption, use it as the message text
+    bot
+      .sendDocument(publics, mediaId, { caption: msg.caption })
+      .then(() => {
+        bot.sendMessage(
+          admins,
+          `${mediaType} forwarded to channel successfully. 
 From ${msg.chat.id}`
-      );
-    })
-    .catch((error) => {
-      console.error("Error forwarding media:", error);
-      bot.sendMessage(msg.from.id, `Error forwarding ${mediaType} to channel.`);
-    });
+        );
+      })
+      .catch((error) => {
+        console.error("Error forwarding media:", error);
+        bot.sendMessage(
+          msg.chat.id,
+          `Error forwarding ${mediaType} to channel.`
+        );
+      });
+  } else {
+    // If there is no caption, send a default message
+    bot
+      .sendDocument(publics, mediaId)
+      .then(() => {
+        bot.sendMessage(
+          admins,
+          `${mediaType} forwarded to channel successfully. 
+From ${msg.chat.id}`
+        );
+      })
+      .catch((error) => {
+        console.error("Error forwarding media:", error);
+        bot.sendMessage(
+          msg.chat.id,
+          `Error forwarding ${mediaType} to channel.`
+        );
+      });
+  }
 }
