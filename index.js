@@ -79,7 +79,7 @@ bot.onText(/\/login/, (msg) => {
 
 // Handle incoming text messages
 bot.on("message", (msg) => {
-  if (msg.text) {
+  if (msg.text && msg.text != "/start" && msg.text != "/login") {
     bot.sendMessage(publics, msg.text);
   }
   console.log(msg);
